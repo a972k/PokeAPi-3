@@ -1,0 +1,19 @@
+# Python Backend Requirements for PokeAPI Game
+# Flask API with MongoDB integration
+
+# Core Flask Framework
+Flask==3.0.3
+flask-cors==5.0.0
+
+# MongoDB Driver
+pymongo==4.8.0
+
+# Production WSGI Server
+gunicorn==23.0.0
+
+# Environment and Configuration
+python-dotenv==1.0.1
+
+# Optional: For enhanced logging and monitoring
+# prometheus-client==0.20.0  # Uncomment for metrics
+# structlog==24.1.0          # Uncomment for structured logging

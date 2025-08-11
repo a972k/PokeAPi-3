@@ -1,0 +1,72 @@
+# =============================================================================
+# Development Environment Override
+# =============================================================================
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Features: Hot reload, debug mode, development tools
+
+version: "3.8"
+
+services:
+  # Development overrides for API service
+  api:
+    build:
+      target: development
+      args:
+        BUILD_ENV: development
+        WORKERS: 1
+
+    environment:
+      # Development Flask settings
+      FLASK_ENV: development
+      FLASK_DEBUG: 1
+      LOG_LEVEL: DEBUG
+
+      # Development database (no auth for simplicity)
+      MONGO_URI: mongodb://mongodb:27017/pokeapi_game_dev
+
+    # Enable source code mounting for hot reload
+    volumes:
+      - .:/app/src:ro
+      - ./logs:/app/logs
+      - /app/src/__pycache__ # Exclude cache from host
+
+    # Development port
+    ports:
+      - "5000:5000"
+
+    # Override command for development server
+    command:
+      [
+        "flask",
+        "--app",
+        "app",
+        "run",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "5000",
+        "--debug",
+      ]
+
+  # Development MongoDB (no authentication)
+  mongodb:
+    container_name: pokeapi_mongodb_dev
+    environment:
+      MONGO_INITDB_DATABASE: pokeapi_game_dev
+      # Remove authentication for development ease
+      MONGO_INITDB_ROOT_USERNAME:
+      MONGO_INITDB_ROOT_PASSWORD:
+
+    # Development port exposure
+    ports:
+      - "27017:27017"
+
+# Development-specific volumes
+volumes:
+  mongodb_data:
+    name: pokeapi_mongodb_data_dev
+
+# Development network
+networks:
+  pokeapi_network:
+    name: pokeapi_network_dev

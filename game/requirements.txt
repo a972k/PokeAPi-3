@@ -1,0 +1,23 @@
+<<<<<<< HEAD
+# Python dependencies for PokeAPI Game
+# External packages that need to be installed via pip
+
+# Core dependencies
+requests>=2.31.0        # For API calls to PokeAPI and backend
+boto3>=1.34.0          # AWS SDK for DynamoDB and S3 integration
+
+# Optional: Development and testing
+# pytest>=7.4.0         # For testing (uncomment if needed)
+# flask>=2.3.0          # For local development server (uncomment if needed)
+=======
+# Python dependencies for PokeAPI Game
+# External packages that need to be installed via pip
+
+# Core dependencies
+requests>=2.31.0        # For API calls to PokeAPI and backend
+boto3>=1.34.0          # AWS SDK for DynamoDB and S3 integration
+
+# Optional: Development and testing
+# pytest>=7.4.0         # For testing (uncomment if needed)
+# flask>=2.3.0          # For local development server (uncomment if needed)
+>>>>>>> b090d02949d07ea172da0fa95b45ed05ba6b52c1

@@ -1,0 +1,263 @@
+---
+# Main Ansible Playbook for Pokemon Collector Deployment
+# This playbook replaces the user_data scripts with proper configuration management
+# 
+# Architecture Overview:
+# - Game Instance (EC2 #1): Runs the Python game frontend with nginx proxy
+# - Backend Instance (EC2 #2): Runs Flask API + MongoDB in Docker containers
+#
+# Deployment Flow:
+# 1. Information Display - Shows deployment targets and environment
+# 2. Backend Configuration - Docker, MongoDB, Flask API setup
+# 3. Game Configuration - Python game, nginx, backend connectivity
+# 4. Validation - Health checks and service verification
+
+- name: Deploy Pokemon Collector Infrastructure
+  hosts: all
+  become: true
+  gather_facts: true
+  
+  vars:
+    # Dynamic IP extraction from Terraform outputs via inventory
+    # These variables reference the actual deployed instance IPs
+    backend_private_ip: "{{ hostvars['backend_instance']['ansible_host'] }}"
+    game_public_ip: "{{ hostvars['game_instance']['ansible_host'] }}"
+  
+  tasks:
+    # Display deployment information for verification before proceeding
+    # This task runs only once to avoid duplicate output
+    - name: Display deployment information
+      debug:
+        msg: |
+          Deploying Pokemon Collector:
+          - Game Instance: {{ game_public_ip }}
+          - Backend Instance: {{ backend_private_ip }}
+          - Environment: {{ environment }}
+      run_once: true
+
+- name: Configure Backend Server
+  hosts: backend_servers
+  become: true
+  vars:
+    # Package lists for backend server setup
+    # Docker is required for containerized MongoDB and Flask API
+    docker_packages:
+      - docker
+      - git
+    # Python requirements for Docker Compose installation
+    python_requirements:
+      - docker-compose
+  
+  tasks:
+    # System preparation - update all packages to latest versions
+    # This ensures security patches and compatibility
+    - name: Update system packages
+      yum:
+        name: "*"
+        state: latest
+        update_cache: yes
+      
+    # Install core packages required for backend operations
+    # Docker: Container runtime for MongoDB and Flask API
+    # Git: Version control for potential code updates
+    - name: Install required packages for backend
+      yum:
+        name: "{{ docker_packages }}"
+        state: present
+    
+    # Download Docker Compose binary from official GitHub releases
+    # Uses Ansible facts for architecture detection (x86_64, aarch64, etc.)
+    # Version is controlled via inventory variable for consistency
+    - name: Download Docker Compose binary
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/{{ docker_compose_version }}/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+        owner: root
+        group: root
+    
+    # Add ec2-user to docker group for non-root Docker access
+    # This allows ec2-user to run docker commands without sudo
+    # append: yes ensures we don't remove user from other groups
+    - name: Add ec2-user to docker group
+      user:
+        name: ec2-user
+        groups: docker
+        append: true
+    
+    # Create application directory with proper ownership
+    # This directory will contain Docker Compose files and backend code
+    - name: Create backend application directory
+      file:
+        path: "{{ backend_app_dir }}"
+        state: directory
+        owner: ec2-user
+        group: ec2-user
+        mode: '0755'
+    
+    # Start Docker daemon and enable it for automatic startup on boot
+    # Backend services depend on Docker being available
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: true
+    
+    # Deploy backend configuration from Jinja2 template
+    # Template includes MongoDB connection, Flask settings, environment config
+    # Triggers handler to restart services when configuration changes
+    - name: Create backend configuration
+      template:
+        src: backend_config.py.j2
+        dest: "{{ backend_app_dir }}/config.py"
+        owner: ec2-user
+        group: ec2-user
+        mode: '0644'
+      notify: restart backend services
+    
+    # Deploy Docker Compose configuration from template
+    # Defines MongoDB and Flask API containers with proper networking
+    # Includes health checks, volume mounts, and environment variables
+    - name: Create Docker Compose configuration
+      template:
+        src: docker-compose.yml.j2
+        dest: "{{ backend_app_dir }}/docker-compose.yml"
+        owner: ec2-user
+        group: ec2-user
+        mode: '0644'
+      notify: restart backend services
+
+- name: Configure Game Server
+  hosts: game_servers
+  become: true
+  vars:
+    # Package requirements for game frontend server
+    # Python3: Runtime for the Pokemon game application
+    # Nginx: Reverse proxy for serving the game and handling requests
+    # Git: Version control for potential code updates
+    game_packages:
+      - python3
+      - python3-pip
+      - git
+      - nginx
+  
+  tasks:
+    # System preparation - ensure all packages are up to date
+    # Critical for security and compatibility with game dependencies
+    - name: Update system packages
+      yum:
+        name: "*"
+        state: latest
+        update_cache: yes
+    
+    # Install packages required for game frontend operations
+    # These form the foundation for running the Python game and web proxy
+    - name: Install required packages for game
+      yum:
+        name: "{{ game_packages }}"
+        state: present
+    
+    # Install Python packages needed by the game application
+    # Includes Flask (for potential game web interface), requests (for API calls)
+    # Uses pip3 to ensure Python 3 compatibility
+    - name: Install Python packages for game
+      pip:
+        name: "{{ python_packages }}"
+        executable: pip3
+        state: present
+    
+    # Create game application directory with proper permissions
+    # This will contain all game files, including main.py, pokeapi.py, etc.
+    - name: Create game application directory
+      file:
+        path: "{{ game_app_dir }}"
+        state: directory
+        owner: ec2-user
+        group: ec2-user
+        mode: '0755'
+    
+    # Deploy nginx configuration from template
+    # Configures reverse proxy to forward requests to the game application
+    # Handles static files, health checks, and request routing
+    - name: Configure nginx for game frontend
+      template:
+        src: nginx_game.conf.j2
+        dest: /etc/nginx/conf.d/pokeapi-game.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart nginx
+    
+    # Remove default nginx configuration to avoid conflicts
+    # Ensures our custom configuration takes precedence
+    - name: Remove default nginx configuration
+      file:
+        path: /etc/nginx/nginx.conf.default
+        state: absent
+    
+    # Deploy backend connection configuration for the game
+    # Contains backend API URLs and connection settings
+    # Allows game to communicate with Flask API on backend instance
+    - name: Create backend connection configuration for game
+      template:
+        src: backend_config.py.j2
+        dest: "{{ game_app_dir }}/backend_config.py"
+        owner: ec2-user
+        group: ec2-user
+        mode: '0644'
+    
+    # Start nginx service and enable automatic startup
+    # Game frontend depends on nginx for request handling
+    - name: Start and enable nginx
+      systemd:
+        name: nginx
+        state: started
+        enabled: true
+
+- name: Post-deployment validation
+  hosts: all
+  become: false
+  tasks:
+    # Wait for critical services to become available on their respective ports
+    # Backend: Flask API on port 5000, Game: Nginx on port 80
+    # Timeout ensures deployment doesn't hang indefinitely if services fail
+    - name: Wait for services to be ready
+      wait_for:
+        port: "{{ item }}"
+        host: "{{ ansible_host }}"
+        delay: 10
+        timeout: 300
+      with_items:
+        - "{{ flask_api_port if inventory_hostname in groups['backend_servers'] else nginx_port }}"
+      when: inventory_hostname in groups['backend_servers'] or inventory_hostname in groups['game_servers']
+    
+    # Test backend health endpoint to ensure Flask API is responding correctly
+    # This validates that the backend is not just running, but actually functional
+    # Retries handle temporary startup delays or intermittent connectivity issues
+    - name: Verify backend health endpoint
+      uri:
+        url: "http://{{ hostvars['backend_instance']['ansible_host'] }}:{{ flask_api_port }}/health"
+        method: GET
+        status_code: 200
+      when: inventory_hostname in groups['game_servers']
+      retries: 5
+      delay: 10
+
+  handlers:
+    # Handler for backend service restarts
+    # Triggered when backend configuration files change
+    # Restarts Docker to reload new configurations
+    - name: restart backend services
+      systemd:
+        name: docker
+        state: restarted
+      when: inventory_hostname in groups['backend_servers']
+    
+    # Handler for game server nginx restarts
+    # Triggered when nginx configuration changes
+    # Ensures new proxy settings take effect immediately
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted
+      when: inventory_hostname in groups['game_servers']

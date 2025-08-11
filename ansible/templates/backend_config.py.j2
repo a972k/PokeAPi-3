@@ -1,0 +1,75 @@
+# Auto-generated backend configuration for Pokemon Collector
+# This configuration is templated by Ansible and provides backend connectivity
+
+{% if inventory_hostname in groups['game_servers'] %}
+# Game instance configuration - connects to backend
+BACKEND_URL = "http://{{ hostvars['backend_instance']['ansible_host'] }}:{{ flask_api_port }}"
+BACKEND_PUBLIC_URL = "http://{{ hostvars['backend_instance']['ansible_host'] }}:{{ flask_api_port }}"
+
+# Game-specific settings
+GAME_SETTINGS = {
+    'cache_enabled': True,
+    'cache_timeout': 300,
+    'max_pokemon_per_request': 100,
+    'retry_attempts': 3,
+    'timeout_seconds': 30
+}
+
+{% elif inventory_hostname in groups['backend_servers'] %}
+# Backend instance configuration
+import os
+from typing import Optional, Dict, Any
+
+class DatabaseConfig:
+    """Database configuration with smart defaults"""
+    def __init__(self):
+        self.MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:{{ mongodb_port }}/pokeapi')
+        self.MONGODB_DB = os.getenv('MONGODB_DB', 'pokeapi')
+        self.MONGODB_COLLECTION = os.getenv('MONGODB_COLLECTION', 'pokemon_collection')
+        
+        # Connection settings
+        self.MONGODB_CONNECT_TIMEOUT = int(os.getenv('MONGODB_CONNECT_TIMEOUT', '10000'))
+        self.MONGODB_SERVER_SELECTION_TIMEOUT = int(os.getenv('MONGODB_SERVER_SELECTION_TIMEOUT', '5000'))
+        self.MONGODB_MAX_POOL_SIZE = int(os.getenv('MONGODB_MAX_POOL_SIZE', '50'))
+
+class APIConfig:
+    """API configuration with validation"""
+    def __init__(self):
+        self.FLASK_HOST = os.getenv('FLASK_HOST', '0.0.0.0')
+        self.FLASK_PORT = int(os.getenv('FLASK_PORT', '{{ flask_api_port }}'))
+        self.FLASK_DEBUG = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
+        
+        # API settings
+        self.API_RATE_LIMIT = os.getenv('API_RATE_LIMIT', '1000 per hour')
+        self.API_REQUEST_TIMEOUT = int(os.getenv('API_REQUEST_TIMEOUT', '30'))
+        self.CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*').split(',')
+
+class Config:
+    """Main configuration class that combines all settings"""
+    def __init__(self):
+        self.database = DatabaseConfig()
+        self.api = APIConfig()
+        self.environment = "{{ environment }}"
+        self.project_name = "{{ project_name }}"
+        
+        # Deployment information
+        self.deployment_info = {
+            'deployed_by': 'ansible',
+            'deployment_time': '{{ ansible_date_time.iso8601 if ansible_date_time is defined else "unknown" }}',
+            'instance_type': '{{ instance_type }}',
+            'environment': self.environment
+        }
+
+def load_config() -> Config:
+    """Load and return configuration instance"""
+    return Config()
+
+# Export for easy importing
+config = load_config()
+{% endif %}
+
+# Common settings for both instances
+ENVIRONMENT = "{{ environment }}"
+PROJECT_NAME = "{{ project_name }}"
+DEPLOYMENT_METHOD = "ansible"
+ANSIBLE_MANAGED = True

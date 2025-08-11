@@ -1,0 +1,131 @@
+# =============================================================================
+# Production Environment Override
+# =============================================================================
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up
+# Features: Optimized performance, security, monitoring, scaling
+
+version: "3.8"
+
+services:
+  # Production optimizations for API service
+  api:
+    build:
+      target: production
+      args:
+        BUILD_ENV: production
+        WORKERS: 4
+        WORKER_TIMEOUT: 60
+        MAX_REQUESTS: 1000
+        MAX_REQUESTS_JITTER: 100
+
+    container_name: pokeapi_api_prod
+
+    environment:
+      # Production Flask settings
+      FLASK_ENV: production
+      FLASK_DEBUG: 0
+      LOG_LEVEL: WARNING
+
+      # Secure database connection
+      MONGO_URI: mongodb://admin:${MONGO_ROOT_PASSWORD}@mongodb:27017/pokeapi_game?authSource=admin&ssl=false&retryWrites=true&w=majority
+
+      # Production security
+      SECRET_KEY: ${SECRET_KEY} # Must be set in environment
+
+    # Production resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+          cpus: "0.5"
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        delay: 10s
+
+    # Production scaling
+    scale: ${API_REPLICAS:-2}
+
+    # Production logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Remove development volumes
+    volumes:
+      - ./logs:/app/logs
+
+  # Production MongoDB with security
+  mongodb:
+    container_name: pokeapi_mongodb_prod
+
+    environment:
+      # Secure MongoDB settings
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD} # Must be set
+      MONGO_INITDB_DATABASE: pokeapi_game
+
+    # Production resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+        reservations:
+          memory: 512M
+          cpus: "0.5"
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        delay: 15s
+
+    # No port exposure in production (internal only)
+    ports: []
+
+    # Production logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+    # Production MongoDB configuration
+    command: ["mongod", "--auth", "--bind_ip_all", "--quiet"]
+
+  # Production monitoring and health checks
+  watchtower:
+    image: containrrr/watchtower
+    container_name: pokeapi_watchtower
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_POLL_INTERVAL: 3600 # Check every hour
+      WATCHTOWER_INCLUDE_STOPPED: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - pokeapi_network
+
+# Production-specific volumes with labels
+volumes:
+  mongodb_data:
+    name: pokeapi_mongodb_data_prod
+    labels:
+      - "com.pokeapi.environment=production"
+      - "com.pokeapi.backup=daily"
+
+# Production network with custom subnet
+networks:
+  pokeapi_network:
+    name: pokeapi_network_prod
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+    labels:
+      - "com.pokeapi.environment=production"

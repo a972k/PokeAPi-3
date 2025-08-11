@@ -1,0 +1,83 @@
+# Ansible Inventory for Pokemon Collector Infrastructure
+# This file defines the hosts and groups for the Pokemon Collector deployment
+# 
+# Structure:
+# - game_servers: EC2 instance running the Python game frontend with nginx
+# - backend_servers: EC2 instance running Flask API and MongoDB in Docker
+#
+# Variables are populated dynamically by the deployment script from Terraform outputs
+# The inventory template gets actual IP addresses injected at deployment time
+
+all:
+  children:
+    # Game servers group - handles Pokemon game frontend
+    # Runs Python game application with nginx reverse proxy
+    game_servers:
+      hosts:
+        game_instance:
+          # Public IP address from Terraform outputs (dynamically populated)
+          ansible_host: "{{ game_instance_ip }}"
+          # Standard EC2 user for Amazon Linux
+          ansible_user: ec2-user
+          # SSH private key path (configurable per environment)
+          ansible_ssh_private_key_file: "{{ ssh_key_path }}"
+          # Instance type for cost optimization (free tier eligible)
+          instance_type: "{{ game_instance_type }}"
+          # Deployment environment (production, staging, development)
+          environment: "{{ deploy_environment }}"
+    
+    # Backend servers group - handles API and database operations
+    # Runs Flask API and MongoDB using Docker containers
+    backend_servers:
+      hosts:
+        backend_instance:
+          # Public IP address from Terraform outputs (dynamically populated)
+          ansible_host: "{{ backend_instance_ip }}"
+          # Standard EC2 user for Amazon Linux
+          ansible_user: ec2-user
+          # SSH private key path (must match game instance for consistency)
+          ansible_ssh_private_key_file: "{{ ssh_key_path }}"
+          # Larger instance type to handle database and API workload
+          instance_type: "{{ backend_instance_type }}"
+          # Deployment environment (should match game instance)
+          environment: "{{ deploy_environment }}"
+  
+  vars:
+    # Global variables that apply to all hosts in the inventory
+    
+    # Python interpreter path for Ansible modules
+    # Ensures compatibility with Amazon Linux Python installation
+    ansible_python_interpreter: /usr/bin/python3
+    
+    # SSH connection arguments for all hosts
+    # Disables host key checking for dynamic EC2 instances
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    
+    # Project identification for resource tagging and organization
+    project_name: "pokeapi-pokemon-collector"
+    
+    # Application directory paths on target instances
+    # Game files will be deployed to this directory on game instance
+    game_app_dir: "/opt/pokeapi-game"
+    # Backend files will be deployed to this directory on backend instance
+    backend_app_dir: "/opt/pokeapi-backend"
+    
+    # Network configuration for service communication
+    # Flask API port for backend communication
+    flask_api_port: 5000
+    # MongoDB port for database connections
+    mongodb_port: 27017
+    # Nginx port for frontend web access
+    nginx_port: 80
+    
+    # Docker configuration for backend container management
+    # Docker Compose version to download and install
+    docker_compose_version: "v2.20.0"
+    
+    # Python package dependencies for both instances
+    # Core packages required by the Pokemon game and API
+    python_packages:
+      - flask          # Web framework for API and potential game interface
+      - requests       # HTTP client for API calls to PokeAPI and backend
+      - pymongo        # MongoDB driver for database operations
+      - python-dotenv  # Environment variable management
