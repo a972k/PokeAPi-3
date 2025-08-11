@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # 🎮 Pokemon Collector - Enhanced Edition
 
 A cloud-native Pokemon collection game with AWS backend infrastructure, featuring a modular 2-EC2 architecture for optimal performance and cost efficiency.
@@ -354,7 +353,5 @@ curl http://localhost:5000/health  # Health check
 
 ---
 
-## Happy Pokemon Collecting! 🎮✨
-=======
-work in progress will be edited soon 
->>>>>>> b090d02949d07ea172da0fa95b45ed05ba6b52c1
+## Happy Pokemon Collecting! 🎮✨ 
+
